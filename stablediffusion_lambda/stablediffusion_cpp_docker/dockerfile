@@ -2,10 +2,13 @@
 ARG FUNCTION_DIR="/function"
 
 # Build Stage
-FROM --platform=arm64 ubuntu:22.04 AS build
+FROM ubuntu:22.04 AS build
 ENV DEBIAN_FRONTEND noninteractive
 
-ARG FOUNDATIONMODEL="https://huggingface.co/justinpinkney/miniSD/resolve/main/miniSD.ckpt"
+ARG FOUNDATIONMODEL="https://huggingface.co/stabilityai/sdxl-turbo/resolve/main/sd_xl_turbo_1.0_fp16.safetensors"
+ARG VAEMODEL="https://huggingface.co/madebyollin/sdxl-vae-fp16-fix/resolve/main/sdxl.vae.safetensors"
+ARG UPSCALER="https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth"
+ARG TAESD="https://huggingface.co/madebyollin/taesdxl/resolve/main/diffusion_pytorch_model.safetensors"
 
 # Install build dependencies
 RUN apt-get update && \
@@ -25,15 +28,23 @@ RUN apt-get update && \
 # Clone the repository and perform the quantization
 WORKDIR /opt
 RUN git clone --recursive https://github.com/leejet/stable-diffusion.cpp
+RUN mkdir /opt/stable-diffusion.cpp/models && mkdir /opt/stable-diffusion.cpp/vae && mkdir /opt/stable-diffusion.cpp/upscaler && mkdir /opt/stable-diffusion.cpp/taesd
 WORKDIR /opt/stable-diffusion.cpp/models
-RUN wget -O foundationmodel.ckpt ${FOUNDATIONMODEL} && \
-    bash -c "python3 -m venv venv && source venv/bin/activate && pip3 install -r requirements.txt && python3 convert.py foundationmodel.ckpt --out_type q4_0 && deactivate" && \
-    mv foundationmodel-ggml-model-q4_0.bin /opt/modelfile.bin
+RUN extension="${FOUNDATIONMODEL##*.}" && wget -O foundationmodel.${extension} ${FOUNDATIONMODEL}
+WORKDIR /opt/stable-diffusion.cpp/vae
+RUN extension="${VAEMODEL##*.}" && wget -O vaemodel.${extension} ${VAEMODEL}
+WORKDIR /opt/stable-diffusion.cpp/upscaler
+RUN extension="${UPSCALER##*.}" && wget -O upscaler.${extension} ${UPSCALER}
+WORKDIR /opt/stable-diffusion.cpp/taesd
+RUN extension="${TAESD##*.}" && wget -O taesd.${extension} ${TAESD}
+
+#No more quantization needed, this works at the edge, though it will need to have a smaller model size due to 10GB limitations...
 
 # Build the binary executable
 WORKDIR /opt/stable-diffusion.cpp
-RUN rm -rf models && \
-    mkdir build
+RUN git submodule init && \
+    git submodule update
+RUN mkdir build
 WORKDIR /opt/stable-diffusion.cpp/build
 RUN cmake .. && \
     cmake --build . --config Release
@@ -44,7 +55,10 @@ ENV DEBIAN_FRONTEND noninteractive
 ARG FUNCTION_DIR
 
 # Copy necessary files from build stage
-COPY --from=build /opt/modelfile.bin /opt/modelfile.bin
+COPY --from=build /opt/stable-diffusion.cpp/models/* /opt/stable-diffusion.cpp/models/
+COPY --from=build /opt/stable-diffusion.cpp/vae/* /opt/stable-diffusion.cpp/vae/
+COPY --from=build /opt/stable-diffusion.cpp/upscaler/* /opt/stable-diffusion.cpp/upscaler/
+COPY --from=build /opt/stable-diffusion.cpp/taesd/* /opt/stable-diffusion.cpp/taesd/
 COPY --from=build /opt/stable-diffusion.cpp/build/bin/sd /opt/stable-diffusion.cpp/build/bin/sd
 
 # Install runtime dependencies
@@ -68,19 +82,22 @@ RUN mkdir -p ${FUNCTION_DIR}
 WORKDIR ${FUNCTION_DIR}
 COPY main.py .
 COPY requirements.txt .
-RUN pip3 install -r requirements.txt --target "${FUNCTION_DIR}" && \
-    pip3 install awslambdaric
-
+RUN pip3 install -r requirements.txt && \
+    pip3 install awslambdaric 
+#I don't know if I want to keep this upscaling method. Maybe compare the two?
 # Set up xbrz.py
-RUN git clone https://github.com/ioistired/xbrz.py.git /xbrz.py
+RUN git clone https://github.com/ioistired/xbrz.py.git /xbrz.py  ##--target "${FUNCTION_DIR}"
 WORKDIR /xbrz.py
 RUN pip3 install pillow && \
     pip3 install .
 
 # Set up environment variables
-ENV MODELPATH /opt/modelfile.bin
+ENV MODELPATH /opt/stable-diffusion.cpp/models
+ENV VAEPATH /opt/stable-diffusion.cpp/vae
+ENV UPSCALEPATH /opt/stable-diffusion.cpp/upscaler
+ENV TAEPATH /opt/stable-diffusion.cpp/taesd
 ENV SDPATH /opt/stable-diffusion.cpp/build/bin/sd
-ENV IMAGE_DIMENSION 256
+ENV IMAGE_DIMENSION 512
 
 # Set working directory to function root directory
 WORKDIR ${FUNCTION_DIR}

@@ -22,6 +22,12 @@ class StablediffusionLambdaStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
+        FOUNDATIONMODEL=self.node.try_get_context('FOUNDATIONMODEL') or "https://huggingface.co/stabilityai/sdxl-turbo/resolve/main/sd_xl_turbo_1.0_fp16.safetensors"
+        VAEMODEL=self.node.try_get_context('VAEMODEL') or "https://huggingface.co/madebyollin/sdxl-vae-fp16-fix/resolve/main/sdxl.vae.safetensors"
+        UPSCALER=self.node.try_get_context('UPSCALER') or "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth"
+        TAESD=self.node.try_get_context('TAESD') or "https://huggingface.co/madebyollin/taesdxl/resolve/main/diffusion_pytorch_model.safetensors"
+
+
         # Create the S3 bucket
         sd_storage_bucket = s3.Bucket(self, "sd-storage-bucket",
             bucket_name="sd-storage-bucket",
@@ -59,10 +65,18 @@ class StablediffusionLambdaStack(Stack):
         "STAGE":"",
         "BUCKET_NAME":sd_storage_bucket.bucket_name,
         },
-        memory_size=4000,
+
+        
+        memory_size=10000,
         retry_attempts=0,
         role=stable_diffusion_lambda_role,
-        code=aws_lambda.DockerImageCode.from_image_asset("./stablediffusion_cpp_docker"),
+        code=aws_lambda.DockerImageCode.from_image_asset("./stablediffusion_cpp_docker",
+            build_args={
+            "FOUNDATIONMODEL": FOUNDATIONMODEL,
+            "VAEMODEL": VAEMODEL,
+            "UPSCALER": UPSCALER,
+            "TAESD":TAESD,
+        },),
         )
 
         stable_diffusion_lambda_function_url=stable_diffusion_lambda_function.add_function_url(
