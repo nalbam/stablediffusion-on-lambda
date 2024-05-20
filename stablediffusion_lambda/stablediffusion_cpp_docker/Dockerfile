@@ -11,7 +11,7 @@ ARG UPSCALER="https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/Re
 ARG TAESD="https://huggingface.co/madebyollin/taesdxl/resolve/main/diffusion_pytorch_model.safetensors"
 
 # Install build dependencies
-RUN apt-get update \
+RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     g++ \
     make \
