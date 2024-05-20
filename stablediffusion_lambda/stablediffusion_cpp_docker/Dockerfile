@@ -50,7 +50,8 @@ RUN cmake .. && \
     cmake --build . --config Release
 
 # Final Stage
-FROM --platform=arm64 ubuntu:22.04 AS final
+FROM ubuntu:22.04 AS final
+# FROM --platform=arm64 ubuntu:22.04 AS final
 ENV DEBIAN_FRONTEND noninteractive
 ARG FUNCTION_DIR
 
