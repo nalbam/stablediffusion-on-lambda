@@ -9,12 +9,9 @@ from aws_cdk import (
     aws_lambda as aws_lambda,
     aws_logs as logs,
     CfnOutput,
-    aws_s3 as s3
-
+    aws_s3 as s3,
 )
 import aws_cdk as cdk
-
-
 
 
 class StablediffusionLambdaStack(Stack):
@@ -22,14 +19,27 @@ class StablediffusionLambdaStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        FOUNDATIONMODEL=self.node.try_get_context('FOUNDATIONMODEL') or "https://huggingface.co/stabilityai/sdxl-turbo/resolve/main/sd_xl_turbo_1.0_fp16.safetensors"
-        VAEMODEL=self.node.try_get_context('VAEMODEL') or "https://huggingface.co/madebyollin/sdxl-vae-fp16-fix/resolve/main/sdxl.vae.safetensors"
-        UPSCALER=self.node.try_get_context('UPSCALER') or "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth"
-        TAESD=self.node.try_get_context('TAESD') or "https://huggingface.co/madebyollin/taesdxl/resolve/main/diffusion_pytorch_model.safetensors"
-
+        FOUNDATIONMODEL = (
+            self.node.try_get_context("FOUNDATIONMODEL")
+            or "https://huggingface.co/stabilityai/sdxl-turbo/resolve/main/sd_xl_turbo_1.0_fp16.safetensors"
+        )
+        VAEMODEL = (
+            self.node.try_get_context("VAEMODEL")
+            or "https://huggingface.co/madebyollin/sdxl-vae-fp16-fix/resolve/main/sdxl.vae.safetensors"
+        )
+        UPSCALER = (
+            self.node.try_get_context("UPSCALER")
+            or "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth"
+        )
+        TAESD = (
+            self.node.try_get_context("TAESD")
+            or "https://huggingface.co/madebyollin/taesdxl/resolve/main/diffusion_pytorch_model.safetensors"
+        )
 
         # Create the S3 bucket
-        sd_storage_bucket = s3.Bucket(self, "sd-storage-bucket",
+        sd_storage_bucket = s3.Bucket(
+            self,
+            "sd-storage-bucket",
             bucket_name="sd-storage-bucket",
             removal_policy=cdk.RemovalPolicy.DESTROY,  # Delete bucket contents when the stack is deleted
             auto_delete_objects=True,  # Automatically delete objects when the bucket is removed
@@ -41,13 +51,13 @@ class StablediffusionLambdaStack(Stack):
             public_read_access=False,  # Ensure the bucket is not public
         )
 
-        #--------------------------------------Stable Diffusion Lambda Function---------------------------------------------
-        stable_diffusion_lambda_function_name="stable_diffusion_lambda_function"
+        # --------------------------------------Stable Diffusion Lambda Function---------------------------------------------
+        stable_diffusion_lambda_function_name = "stable_diffusion_lambda_function"
 
-        stable_diffusion_lambda_role=iam.Role(
+        stable_diffusion_lambda_role = iam.Role(
             self,
             id="stable_diffusion_lambda_role",
-            assumed_by = iam.ServicePrincipal("lambda.amazonaws.com")
+            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
         )
 
         stable_diffusion_lambda_role.add_managed_policy(
@@ -56,46 +66,45 @@ class StablediffusionLambdaStack(Stack):
             )
         )
 
-        stable_diffusion_lambda_function=aws_lambda.DockerImageFunction(self,stable_diffusion_lambda_function_name,
-        architecture=aws_lambda.Architecture.ARM_64,
-        timeout=Duration.seconds(900),
-        log_retention=logs.RetentionDays.ONE_WEEK,
-        environment={
-
-        "STAGE":"",
-        "BUCKET_NAME":sd_storage_bucket.bucket_name,
-        },
-
-        
-        memory_size=10000,
-        retry_attempts=0,
-        role=stable_diffusion_lambda_role,
-        code=aws_lambda.DockerImageCode.from_image_asset("./stablediffusion_cpp_docker",
-            build_args={
-            "FOUNDATIONMODEL": FOUNDATIONMODEL,
-            "VAEMODEL": VAEMODEL,
-            "UPSCALER": UPSCALER,
-            "TAESD":TAESD,
-        },),
+        stable_diffusion_lambda_function = aws_lambda.DockerImageFunction(
+            self,
+            stable_diffusion_lambda_function_name,
+            architecture=aws_lambda.Architecture.ARM_64,
+            timeout=Duration.seconds(900),
+            log_retention=logs.RetentionDays.ONE_WEEK,
+            environment={
+                "STAGE": "",
+                "BUCKET_NAME": sd_storage_bucket.bucket_name,
+            },
+            memory_size=10000,
+            retry_attempts=0,
+            role=stable_diffusion_lambda_role,
+            code=aws_lambda.DockerImageCode.from_image_asset(
+                "./stablediffusion_cpp_docker",
+                build_args={
+                    "FOUNDATIONMODEL": FOUNDATIONMODEL,
+                    "VAEMODEL": VAEMODEL,
+                    "UPSCALER": UPSCALER,
+                    "TAESD": TAESD,
+                },
+            ),
         )
 
-        stable_diffusion_lambda_function_url=stable_diffusion_lambda_function.add_function_url(
+        stable_diffusion_lambda_function_url = stable_diffusion_lambda_function.add_function_url(
             auth_type=aws_lambda.FunctionUrlAuthType.NONE,
             cors=aws_lambda.FunctionUrlCorsOptions(
-         #Allow this to be called from websites on https://example.com.
-         #Can also be ['*'] to allow all domain.
-        allowed_origins=["*"]
+                # Allow this to be called from websites on https://example.com.
+                # Can also be ['*'] to allow all domain.
+                allowed_origins=["*"]
+            ),
+            # we need to allow all interactions with this url
         )
-        #we need to allow all interactions with this url
-        )
-
-        
 
         # Grant the Lambda function full permissions to the S3 bucket
         sd_storage_bucket.grant_read_write(stable_diffusion_lambda_function)
 
-
-
-        CfnOutput(self, "StableDiffusionUrl",
-        value=stable_diffusion_lambda_function_url.url + "docs"
+        CfnOutput(
+            self,
+            "StableDiffusionUrl",
+            value=stable_diffusion_lambda_function_url.url + "docs",
         )

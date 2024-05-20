@@ -83,7 +83,7 @@ WORKDIR ${FUNCTION_DIR}
 COPY main.py .
 COPY requirements.txt .
 RUN pip3 install -r requirements.txt && \
-    pip3 install awslambdaric 
+    pip3 install awslambdaric
 #I don't know if I want to keep this upscaling method. Maybe compare the two?
 # Set up xbrz.py
 RUN git clone https://github.com/ioistired/xbrz.py.git /xbrz.py  ##--target "${FUNCTION_DIR}"
