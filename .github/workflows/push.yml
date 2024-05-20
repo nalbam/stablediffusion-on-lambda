@@ -24,11 +24,8 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: Install dependencies
+      - name: Install aws-cdk
         run: npm install -g aws-cdk
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
 
       - name: Deploy to AWS Lambda 🚀
         env:
@@ -37,4 +34,5 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           cd stablediffusion_lambda
+          pip install -r requirements.txt
           cdk deploy --require-approval never
