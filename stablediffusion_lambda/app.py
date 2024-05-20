@@ -2,9 +2,7 @@
 
 import aws_cdk as cdk
 
-from stablediffusion_lambda.stablediffusion_lambda_stack import (
-    StablediffusionLambdaStack,
-)
+from stablediffusion_lambda.stablediffusion_lambda_stack import StablediffusionLambdaStack
 
 
 app = cdk.App()
