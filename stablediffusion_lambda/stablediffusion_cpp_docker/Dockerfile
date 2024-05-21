@@ -2,7 +2,7 @@
 ARG FUNCTION_DIR="/function"
 
 # Build Stage
-FROM --platform=arm64 ubuntu:22.04 AS build
+FROM ubuntu:22.04 AS build
 ENV DEBIAN_FRONTEND noninteractive
 
 ARG FOUNDATIONMODEL="https://huggingface.co/stabilityai/sdxl-turbo/resolve/main/sd_xl_turbo_1.0_fp16.safetensors"
@@ -38,6 +38,8 @@ RUN extension="${UPSCALER##*.}" && wget -O upscaler.${extension} ${UPSCALER}
 WORKDIR /opt/stable-diffusion.cpp/taesd
 RUN extension="${TAESD##*.}" && wget -O taesd.${extension} ${TAESD}
 
+#No more quantization needed, this works at the edge, though it will need to have a smaller model size due to 10GB limitations...
+
 # Build the binary executable
 WORKDIR /opt/stable-diffusion.cpp
 RUN git submodule init && \
@@ -48,7 +50,8 @@ RUN cmake .. && \
     cmake --build . --config Release
 
 # Final Stage
-FROM --platform=arm64 ubuntu:22.04 AS final
+FROM ubuntu:22.04 AS final
+# FROM --platform=arm64 ubuntu:22.04 AS final
 ENV DEBIAN_FRONTEND noninteractive
 ARG FUNCTION_DIR
 
@@ -62,17 +65,17 @@ COPY --from=build /opt/stable-diffusion.cpp/build/bin/sd /opt/stable-diffusion.c
 # Install runtime dependencies
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    python3 \
-    python3-pip \
-    python3-dev \
-    python3.10-venv \
-    git \
     g++ \
     make \
     cmake \
     unzip \
     libcurl4-openssl-dev \
-    python3-pip && \
+    python3 \
+    python3-pip \
+    python3-dev \
+    python3.10-venv \
+    wget \
+    git && \
     rm -rf /var/lib/apt/lists/*
 
 # Set up the runtime environment
@@ -82,9 +85,9 @@ COPY main.py .
 COPY requirements.txt .
 RUN pip3 install -r requirements.txt && \
     pip3 install awslambdaric
-
+#I don't know if I want to keep this upscaling method. Maybe compare the two?
 # Set up xbrz.py
-RUN git clone https://github.com/ioistired/xbrz.py.git /xbrz.py
+RUN git clone https://github.com/ioistired/xbrz.py.git /xbrz.py  ##--target "${FUNCTION_DIR}"
 WORKDIR /xbrz.py
 RUN pip3 install pillow && \
     pip3 install .
